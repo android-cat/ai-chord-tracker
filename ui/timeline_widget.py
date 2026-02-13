@@ -19,19 +19,28 @@ class TimelineCanvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.chords = []
+        self.keys = []
         self.duration = 0.0
         self._playhead_time = 0.0
         self._zoom = 1.0
-        self.setMinimumHeight(80)
+        self.setMinimumHeight(100)
         self.setCursor(Qt.PointingHandCursor)
 
     def set_chords(self, chords):
         self.chords = chords
         if chords:
             self.duration = max(end for _, end, _ in chords)
+        elif self.keys:
+            self.duration = max(end for _, end, _ in self.keys)
         else:
             self.duration = 0.0
         self._update_size()
+        self.update()
+
+    def set_keys(self, keys):
+        self.keys = keys
+        if keys and not self.chords:
+            self.duration = max(end for _, end, _ in keys)
         self.update()
 
     def set_playhead(self, time_sec):
@@ -73,9 +82,57 @@ class TimelineCanvas(QWidget):
                              "コード解析結果がここに表示されます")
             return
 
-        margin_top = 10
+        key_lane_h = 18
+        margin_top = 4
         margin_bottom = 22
-        block_height = h - margin_top - margin_bottom
+        chord_top = margin_top + key_lane_h + 2
+        block_height = h - chord_top - margin_bottom
+
+        # Draw key lane
+        if self.keys:
+            key_colors = {
+                'C': '#EDE9FE', 'Db': '#E0E7FF', 'D': '#DBEAFE',
+                'Eb': '#D1FAE5', 'E': '#FEF3C7', 'F': '#FEE2E2',
+                'Gb': '#FCE7F3', 'G': '#E9D5FF', 'Ab': '#DDD6FE',
+                'A': '#CCFBF1', 'Bb': '#FBCFE8', 'B': '#FFE4E6',
+                'Am': '#EDE9FE', 'Bbm': '#E0E7FF', 'Bm': '#DBEAFE',
+                'Cm': '#D1FAE5', 'C#m': '#FEF3C7', 'Dm': '#FEE2E2',
+                'Ebm': '#FCE7F3', 'Em': '#E9D5FF', 'F#m': '#DDD6FE',
+                'Fm': '#CCFBF1', 'Gm': '#FBCFE8', 'G#m': '#FFE4E6',
+                'N': '#F3F4F6',
+            }
+            key_border_colors = {
+                'C': '#C4B5FD', 'Db': '#A5B4FC', 'D': '#93C5FD',
+                'Eb': '#6EE7B7', 'E': '#FCD34D', 'F': '#FCA5A5',
+                'Gb': '#F9A8D4', 'G': '#C4B5FD', 'Ab': '#A78BFA',
+                'A': '#5EEAD4', 'Bb': '#F9A8D4', 'B': '#FDA4AF',
+                'Am': '#C4B5FD', 'Bbm': '#A5B4FC', 'Bm': '#93C5FD',
+                'Cm': '#6EE7B7', 'C#m': '#FCD34D', 'Dm': '#FCA5A5',
+                'Ebm': '#F9A8D4', 'Em': '#C4B5FD', 'F#m': '#A78BFA',
+                'Fm': '#5EEAD4', 'Gm': '#F9A8D4', 'G#m': '#FDA4AF',
+                'N': '#D1D5DB',
+            }
+            for start, end, key in self.keys:
+                if key == 'N':
+                    continue
+                x1 = (start / self.duration) * w
+                x2 = (end / self.duration) * w
+                kw = max(x2 - x1, 2)
+
+                bg = key_colors.get(key, '#F3F4F6')
+                border = key_border_colors.get(key, '#D1D5DB')
+
+                rect = QRectF(x1, margin_top, kw, key_lane_h)
+                painter.setPen(QPen(QColor(border), 1))
+                painter.setBrush(QBrush(QColor(bg)))
+                painter.drawRoundedRect(rect, 3, 3)
+
+                if kw > 24:
+                    painter.setPen(QColor('#6B21A8'))
+                    font_size = 8 if kw > 50 else 7
+                    painter.setFont(QFont('Segoe UI', font_size, QFont.Bold))
+                    text_rect = QRectF(x1 + 2, margin_top, kw - 4, key_lane_h)
+                    painter.drawText(text_rect, Qt.AlignCenter, key)
 
         # Draw chord blocks
         for start, end, chord in self.chords:
@@ -87,8 +144,8 @@ class TimelineCanvas(QWidget):
             bg_color = CHORD_COLORS.get(root, '#F3F4F6')
             border_color = CHORD_BORDER_COLORS.get(root, '#D1D5DB')
 
-            rect = QRectF(x1, margin_top, block_w, block_height)
-            gradient = QLinearGradient(x1, margin_top, x1, margin_top + block_height)
+            rect = QRectF(x1, chord_top, block_w, block_height)
+            gradient = QLinearGradient(x1, chord_top, x1, chord_top + block_height)
             gradient.setColorAt(0.0, QColor(bg_color))
             bg_darker = QColor(bg_color)
             bg_darker.setAlpha(200)
@@ -103,7 +160,7 @@ class TimelineCanvas(QWidget):
                 font_size = 10 if block_w > 60 else 8 if block_w > 40 else 7
                 font = QFont('Segoe UI', font_size, QFont.Bold)
                 painter.setFont(font)
-                text_rect = QRectF(x1 + 3, margin_top, block_w - 6, block_height)
+                text_rect = QRectF(x1 + 3, chord_top, block_w - 6, block_height)
                 painter.drawText(text_rect, Qt.AlignCenter, chord)
 
         # Time markers
@@ -176,6 +233,9 @@ class TimelineWidget(QScrollArea):
 
     def set_chords(self, chords):
         self._canvas.set_chords(chords)
+
+    def set_keys(self, keys):
+        self._canvas.set_keys(keys)
 
     def set_playhead(self, time_sec):
         self._canvas.set_playhead(time_sec)

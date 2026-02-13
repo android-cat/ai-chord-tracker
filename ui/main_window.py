@@ -17,7 +17,7 @@ from player import AudioPlayer
 class AnalysisWorker(QThread):
     """Background worker for audio analysis."""
 
-    finished = Signal(list)              # chord timeline
+    finished = Signal(list, list)         # chord_timeline, key_timeline
     error = Signal(str)
     progress = Signal(str)               # status message
     audio_loaded = Signal(object, int)   # audio_data, sample_rate
@@ -29,23 +29,30 @@ class AnalysisWorker(QThread):
 
     def run(self):
         try:
-            from audio_processor import preprocess, convert_time, load_audio_for_playback
+            from audio_processor import (
+                preprocess, convert_time, convert_time_key,
+                modify_accidentals, load_audio_for_playback
+            )
 
             self.progress.emit("音声ファイル読み込み中...")
             audio_data, sr = load_audio_for_playback(self.filepath)
             self.audio_loaded.emit(audio_data, sr)
 
             self.progress.emit("スペクトログラム計算中...")
-            S, bins_per_seconds = preprocess(self.filepath)
+            S, bins_per_second, duration = preprocess(self.filepath)
 
             self.progress.emit("コード推定中...")
             pred = self.chord_model.predict(S)
 
             self.progress.emit("タイムライン生成中...")
-            times = convert_time(pred, bins_per_seconds,
-                                 self.chord_model.chord_index)
+            chord_times = convert_time(pred, bins_per_second,
+                                       self.chord_model.chord_index)
+            key_times = convert_time_key(pred, bins_per_second)
 
-            self.finished.emit(times)
+            self.progress.emit("アクシデンタル修正中...")
+            chord_times = modify_accidentals(chord_times, key_times)
+
+            self.finished.emit(chord_times, key_times)
         except Exception as e:
             self.error.emit(str(e))
 
@@ -64,6 +71,7 @@ class MainWindow(QMainWindow):
         self._init_model_lazy = True    # load model on first use
         self._chord_model = None
         self.chord_timeline = []
+        self.key_timeline = []
         self.current_filepath = None
         self._worker = None
 
@@ -145,8 +153,8 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(tl_header)
 
         self.timeline_widget = TimelineWidget()
-        self.timeline_widget.setMinimumHeight(90)
-        self.timeline_widget.setMaximumHeight(130)
+        self.timeline_widget.setMinimumHeight(110)
+        self.timeline_widget.setMaximumHeight(160)
         main_layout.addWidget(self.timeline_widget)
 
         # Player controls
@@ -216,6 +224,20 @@ class MainWindow(QMainWindow):
         self.current_chord_label.setMinimumWidth(200)
         chord_col.addWidget(self.current_chord_label)
         layout.addLayout(chord_col)
+
+        # Current key
+        key_col = QVBoxLayout()
+        key_col.setSpacing(2)
+        kl_title = QLabel("CURRENT KEY")
+        kl_title.setObjectName("sectionLabel")
+        key_col.addWidget(kl_title)
+        self.current_key_label = QLabel("---")
+        self.current_key_label.setObjectName("keyLabel")
+        self.current_key_label.setMinimumWidth(120)
+        self.current_key_label.setStyleSheet(
+            "font-size: 28px; font-weight: 700; color: #7C3AED;")
+        key_col.addWidget(self.current_key_label)
+        layout.addLayout(key_col)
 
         layout.addStretch()
 
@@ -300,10 +322,12 @@ class MainWindow(QMainWindow):
         self.player.load(audio_data, sr)
         self.waveform_widget.set_audio(audio_data, sr)
 
-    @Slot(list)
-    def _on_analysis_finished(self, times):
-        self.chord_timeline = times
-        self.timeline_widget.set_chords(times)
+    @Slot(list, list)
+    def _on_analysis_finished(self, chord_times, key_times):
+        self.chord_timeline = chord_times
+        self.key_timeline = key_times
+        self.timeline_widget.set_chords(chord_times)
+        self.timeline_widget.set_keys(key_times)
 
         duration = self.player.duration
         self.player_controls.set_duration(duration)
@@ -314,7 +338,7 @@ class MainWindow(QMainWindow):
 
         fname = os.path.basename(self.current_filepath or '')
         self.status_bar.showMessage(
-            f"解析完了: {fname}  ({len(times)} コード検出)")
+            f"解析完了: {fname}  ({len(chord_times)} コード検出)")
         self._update_time_display(0.0)
         self.export_button.setEnabled(True)
 
@@ -384,6 +408,13 @@ class MainWindow(QMainWindow):
                 chord = c
                 break
         self.current_chord_label.setText(chord)
+
+        key = "---"
+        for s, e, k in self.key_timeline:
+            if s <= time_sec < e:
+                key = k if k != "N" else "---"
+                break
+        self.current_key_label.setText(key)
 
     @Slot()
     def _on_export_text(self):

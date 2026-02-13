@@ -31,6 +31,11 @@ if errorlevel 1 (
     pip install -r requirements.txt
 )
 
+REM モデルの確認
+if not exist model\chordestimation (
+    echo モデルが見つかりません。初回起動時にモデルが自動ダウンロードされます。
+)
+
 REM アプリケーション実行
 echo AI Chord Trackerを起動しています...
 python main.py
