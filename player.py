@@ -13,8 +13,9 @@ class AudioPlayer(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.audio_data = None
-        self.sr = 22050
+        self.audio_data = None   # shape: (samples, channels) or (samples,)
+        self.sr = 44100
+        self._channels = 2
         self._position = 0        # in samples
         self._playing = False
         self._reverse = False
@@ -37,18 +38,37 @@ class AudioPlayer(QObject):
         self._volume = max(0.0, min(1.0, float(value)))
 
     def load(self, audio_data, sr):
-        """Load audio data for playback."""
+        """Load audio data for playback.
+
+        Args:
+            audio_data: numpy array, shape (samples, channels) or (samples,)
+            sr: sample rate
+        """
         self.stop()
         self.audio_data = audio_data.astype(np.float32)
         self.sr = sr
+
+        # Determine channel count
+        if self.audio_data.ndim == 1:
+            self._channels = 1
+        else:
+            self._channels = self.audio_data.shape[1]
+
         self._position = 0
+
+    @property
+    def _num_samples(self):
+        """Total number of samples."""
+        if self.audio_data is None:
+            return 0
+        return self.audio_data.shape[0]
 
     @property
     def duration(self):
         """Total duration in seconds."""
         if self.audio_data is None:
             return 0.0
-        return len(self.audio_data) / self.sr
+        return self._num_samples / self.sr
 
     @property
     def current_time(self):
@@ -60,7 +80,7 @@ class AudioPlayer(QObject):
         """Set playback position in seconds."""
         self._position = int(t * self.sr)
         if self.audio_data is not None:
-            self._position = max(0, min(self._position, len(self.audio_data)))
+            self._position = max(0, min(self._position, self._num_samples))
 
     def _audio_callback(self, outdata, frames, time_info, status):
         """Sounddevice callback for audio output."""
@@ -77,33 +97,57 @@ class AudioPlayer(QObject):
                     self._position = 0
                     self._playing = False
                     return
-                chunk = self.audio_data[0:self._position][::-1]
-                outdata[:chunk_len, 0] = chunk * self._volume
+                chunk = self._get_chunk(0, self._position, reverse=True)
+                outdata[:chunk_len] = chunk * self._volume
                 outdata[chunk_len:] = 0
                 self._position = 0
                 self._playing = False
                 return
-            chunk = self.audio_data[start:self._position][::-1]
+            chunk = self._get_chunk(start, self._position, reverse=True)
             self._position = start
         else:
             end = self._position + frames
-            if end > len(self.audio_data):
-                chunk_len = len(self.audio_data) - self._position
+            if end > self._num_samples:
+                chunk_len = self._num_samples - self._position
                 if chunk_len <= 0:
                     outdata.fill(0)
-                    self._position = len(self.audio_data)
+                    self._position = self._num_samples
                     self._playing = False
                     return
-                chunk = self.audio_data[self._position:]
-                outdata[:chunk_len, 0] = chunk * self._volume
+                chunk = self._get_chunk(self._position, self._num_samples)
+                outdata[:chunk_len] = chunk * self._volume
                 outdata[chunk_len:] = 0
-                self._position = len(self.audio_data)
+                self._position = self._num_samples
                 self._playing = False
                 return
-            chunk = self.audio_data[self._position:end]
+            chunk = self._get_chunk(self._position, end)
             self._position = end
 
-        outdata[:, 0] = chunk * self._volume
+        outdata[:] = chunk * self._volume
+
+    def _get_chunk(self, start, end, reverse=False):
+        """Extract a chunk of audio data, ensuring correct shape for output.
+
+        Args:
+            start: start sample index
+            end: end sample index
+            reverse: if True, reverse the chunk
+
+        Returns:
+            numpy array of shape (frames, channels)
+        """
+        if self.audio_data.ndim == 1:
+            # Mono data → expand to match output channels
+            chunk = self.audio_data[start:end]
+            if reverse:
+                chunk = chunk[::-1]
+            # Duplicate mono to all output channels
+            chunk = np.column_stack([chunk] * self._channels)
+        else:
+            chunk = self.audio_data[start:end]
+            if reverse:
+                chunk = chunk[::-1]
+        return chunk
 
     def play(self):
         """Start forward playback."""
@@ -114,14 +158,14 @@ class AudioPlayer(QObject):
         self._playing = True
         self._reverse = False
 
-        if self._position >= len(self.audio_data):
+        if self._position >= self._num_samples:
             self._position = 0
 
         self._stream = sd.OutputStream(
             samplerate=self.sr,
-            channels=1,
+            channels=self._channels,
             callback=self._audio_callback,
-            blocksize=1024,
+            blocksize=2048,
             dtype='float32'
         )
         self._stream.start()
@@ -138,13 +182,13 @@ class AudioPlayer(QObject):
         self._reverse = True
 
         if self._position <= 0:
-            self._position = len(self.audio_data)
+            self._position = self._num_samples
 
         self._stream = sd.OutputStream(
             samplerate=self.sr,
-            channels=1,
+            channels=self._channels,
             callback=self._audio_callback,
-            blocksize=1024,
+            blocksize=2048,
             dtype='float32'
         )
         self._stream.start()

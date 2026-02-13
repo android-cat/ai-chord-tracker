@@ -48,16 +48,23 @@ def preprocess(path, sr=22050, hop_length=512):
 
 
 def load_audio_for_playback(path, sr=None):
-    """Load audio for playback (mono, original or specified sample rate).
+    """Load audio for playback (stereo, original sample rate).
 
     Args:
         path: Path to audio file.
         sr: Target sample rate (None for original).
 
     Returns:
-        Tuple of (audio array, sample rate).
+        Tuple of (audio array [shape: (samples, channels)], sample rate).
     """
-    y, sr = librosa.load(path, sr=sr, mono=True)
+    y, sr = librosa.load(path, sr=sr, mono=False)
+    # y shape: (channels, samples) or (samples,) for mono files
+    if y.ndim == 1:
+        # Mono file: duplicate to stereo
+        y = np.stack([y, y], axis=-1)
+    else:
+        # Stereo/multi-channel: transpose to (samples, channels)
+        y = y.T
     return y, sr
 
 

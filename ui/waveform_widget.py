@@ -13,6 +13,7 @@ class WaveformWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.audio_data = None
+        self._display_data = None
         self.sr = 22050
         self.duration = 0.0
         self._playhead_time = 0.0
@@ -23,21 +24,27 @@ class WaveformWidget(QWidget):
 
     def set_audio(self, audio_data, sr):
         """Set audio data and precompute peaks for display."""
+        # Convert stereo to mono for waveform display
+        if audio_data.ndim == 2:
+            self._display_data = np.mean(audio_data, axis=1)
+        else:
+            self._display_data = audio_data
         self.audio_data = audio_data
         self.sr = sr
-        self.duration = len(audio_data) / sr
+        self.duration = len(self._display_data) / sr
         self._compute_peaks()
         self.update()
 
     def _compute_peaks(self):
         """Precompute positive and negative peaks for efficient rendering."""
-        if self.audio_data is None:
+        if self._display_data is None:
             return
 
-        num_bins = min(2000, len(self.audio_data))
-        samples_per_bin = max(1, len(self.audio_data) // num_bins)
+        data_1d = self._display_data
+        num_bins = min(2000, len(data_1d))
+        samples_per_bin = max(1, len(data_1d) // num_bins)
         n = samples_per_bin * num_bins
-        data = self.audio_data[:n].reshape(num_bins, samples_per_bin)
+        data = data_1d[:n].reshape(num_bins, samples_per_bin)
         self._peaks_pos = np.max(data, axis=1)
         self._peaks_neg = np.min(data, axis=1)
 
