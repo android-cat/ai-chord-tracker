@@ -107,6 +107,11 @@ QPushButton#primaryButton:pressed {
     background-color: #1D4ED8;
 }
 
+QPushButton#primaryButton:disabled {
+    background-color: #E5E7EB;
+    color: #9CA3AF;
+}
+
 /* ========== Labels ========== */
 QLabel {
     background-color: transparent;

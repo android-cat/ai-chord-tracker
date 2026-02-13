@@ -169,7 +169,8 @@ class PlayerControls(QWidget):
                 background-color: #1D4ED8;
             }}
             QPushButton:disabled {{
-                background-color: #93C5FD;
-                color: rgba(255,255,255,0.6);
+                background-color: #E5E7EB;
+                color: #9CA3AF;
+                border: none;
             }}
         """

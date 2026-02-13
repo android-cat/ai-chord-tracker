@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
 
         # Player controls
         self.player_controls = PlayerControls()
+        self.player_controls.setEnabled(False)  # 最初は無効化
         main_layout.addWidget(self.player_controls)
 
         # Progress bar (hidden by default)
