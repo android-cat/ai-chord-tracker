@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
             self,
             "音声ファイルを選択",
             "",
-            "音声ファイル (*.wav *.mp3 *.ogg);;All Files (*)"
+            "音声ファイル (*.wav *.mp3 *.ogg *.m4a);;All Files (*)"
         )
         if not filepath:
             return
