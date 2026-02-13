@@ -113,9 +113,36 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.waveform_widget)
 
         # Timeline section
+        tl_header = QHBoxLayout()
         tl_label = QLabel("CHORD TIMELINE")
         tl_label.setObjectName("sectionLabel")
-        main_layout.addWidget(tl_label)
+        tl_header.addWidget(tl_label)
+        tl_header.addStretch()
+
+        # Zoom out button
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setFixedSize(28, 28)
+        self.zoom_out_btn.setToolTip("タイムライン縮小")
+        self.zoom_out_btn.setCursor(Qt.PointingHandCursor)
+        self.zoom_out_btn.setStyleSheet(self._zoom_button_style())
+        tl_header.addWidget(self.zoom_out_btn)
+
+        # Zoom label
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setFixedWidth(45)
+        self.zoom_label.setAlignment(Qt.AlignCenter)
+        self.zoom_label.setStyleSheet("font-size: 11px; color: #6B7280;")
+        tl_header.addWidget(self.zoom_label)
+
+        # Zoom in button
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setFixedSize(28, 28)
+        self.zoom_in_btn.setToolTip("タイムライン拡大")
+        self.zoom_in_btn.setCursor(Qt.PointingHandCursor)
+        self.zoom_in_btn.setStyleSheet(self._zoom_button_style())
+        tl_header.addWidget(self.zoom_in_btn)
+
+        main_layout.addLayout(tl_header)
 
         self.timeline_widget = TimelineWidget()
         self.timeline_widget.setMinimumHeight(90)
@@ -229,6 +256,10 @@ class MainWindow(QMainWindow):
         # Click‑to‑seek on waveform / timeline
         self.waveform_widget.position_clicked.connect(self._on_seek)
         self.timeline_widget.position_clicked.connect(self._on_seek)
+
+        # Zoom
+        self.zoom_in_btn.clicked.connect(self._on_zoom_in)
+        self.zoom_out_btn.clicked.connect(self._on_zoom_out)
 
     # ── Slots ───────────────────────────────────────────────────
 
@@ -396,6 +427,41 @@ class MainWindow(QMainWindow):
         m = int(seconds // 60)
         s = seconds % 60
         return f"{m}:{s:04.1f}"
+
+    # ── Zoom ────────────────────────────────────────────────────
+
+    def _on_zoom_in(self):
+        self.timeline_widget.zoom_in()
+        self._update_zoom_label()
+
+    def _on_zoom_out(self):
+        self.timeline_widget.zoom_out()
+        self._update_zoom_label()
+
+    def _update_zoom_label(self):
+        zoom = self.timeline_widget.get_zoom()
+        self.zoom_label.setText(f"{int(zoom * 100)}%")
+
+    @staticmethod
+    def _zoom_button_style():
+        return """
+            QPushButton {
+                background-color: #F0F2F5;
+                border: 1px solid #E4E7EB;
+                border-radius: 6px;
+                font-size: 16px;
+                font-weight: 700;
+                color: #3B82F6;
+                padding: 0;
+            }
+            QPushButton:hover {
+                background-color: #EFF6FF;
+                border-color: #3B82F6;
+            }
+            QPushButton:pressed {
+                background-color: #DBEAFE;
+            }
+        """
 
     def closeEvent(self, event):
         self.player.cleanup()

@@ -1,6 +1,6 @@
-"""Chord timeline display widget using QPainter."""
+"""Chord timeline display widget using QPainter with zoom & scroll."""
 import numpy as np
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QFrame
 from PySide6.QtCore import Qt, Signal, QRectF, QPointF
 from PySide6.QtGui import (
     QPainter, QColor, QFont, QPen, QBrush,
@@ -11,35 +11,52 @@ from ui.styles import CHORD_COLORS, CHORD_BORDER_COLORS
 from audio_processor import get_chord_root
 
 
-class TimelineWidget(QWidget):
-    """Custom widget displaying chord blocks on a timeline."""
+class TimelineCanvas(QWidget):
+    """Inner canvas that draws the timeline at the current zoom level."""
 
     position_clicked = Signal(float)  # time in seconds
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.chords = []          # List of [start, end, chord_name]
+        self.chords = []
         self.duration = 0.0
         self._playhead_time = 0.0
+        self._zoom = 1.0
         self.setMinimumHeight(80)
         self.setCursor(Qt.PointingHandCursor)
 
     def set_chords(self, chords):
-        """Set chord timeline data."""
         self.chords = chords
         if chords:
             self.duration = max(end for _, end, _ in chords)
         else:
             self.duration = 0.0
+        self._update_size()
         self.update()
 
     def set_playhead(self, time_sec):
-        """Update playhead position."""
         self._playhead_time = time_sec
         self.update()
 
+    def set_zoom(self, zoom):
+        self._zoom = max(1.0, min(zoom, 20.0))
+        self._update_size()
+        self.update()
+
+    def get_zoom(self):
+        return self._zoom
+
+    def _update_size(self):
+        """Resize canvas width based on zoom level."""
+        parent = self.parent()
+        if parent:
+            base_w = parent.width() - 2  # account for frame border
+        else:
+            base_w = 800
+        new_w = max(base_w, int(base_w * self._zoom))
+        self.setFixedWidth(new_w)
+
     def paintEvent(self, event):
-        """Draw the timeline."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
@@ -49,12 +66,7 @@ class TimelineWidget(QWidget):
         # Background
         painter.fillRect(0, 0, w, h, QColor('#FAFBFC'))
 
-        # Border
-        painter.setPen(QPen(QColor('#E4E7EB'), 1))
-        painter.drawRoundedRect(0, 0, w - 1, h - 1, 8, 8)
-
         if not self.chords or self.duration <= 0:
-            # Draw placeholder
             painter.setPen(QColor('#D1D5DB'))
             painter.setFont(QFont('Segoe UI', 11))
             painter.drawText(QRectF(0, 0, w, h), Qt.AlignCenter,
@@ -75,7 +87,6 @@ class TimelineWidget(QWidget):
             bg_color = CHORD_COLORS.get(root, '#F3F4F6')
             border_color = CHORD_BORDER_COLORS.get(root, '#D1D5DB')
 
-            # Block background with subtle gradient
             rect = QRectF(x1, margin_top, block_w, block_height)
             gradient = QLinearGradient(x1, margin_top, x1, margin_top + block_height)
             gradient.setColorAt(0.0, QColor(bg_color))
@@ -87,7 +98,6 @@ class TimelineWidget(QWidget):
             painter.setBrush(QBrush(gradient))
             painter.drawRoundedRect(rect, 4, 4)
 
-            # Chord name (only if block is wide enough)
             if block_w > 28:
                 painter.setPen(QColor('#374151'))
                 font_size = 10 if block_w > 60 else 8 if block_w > 40 else 7
@@ -115,35 +125,88 @@ class TimelineWidget(QWidget):
         if self._playhead_time >= 0 and self.duration > 0:
             px = (self._playhead_time / self.duration) * w
 
-            # Playhead shadow
             painter.setPen(QPen(QColor(239, 68, 68, 40), 6))
             painter.drawLine(int(px), 0, int(px), h)
 
-            # Playhead line
             painter.setPen(QPen(QColor('#EF4444'), 2))
             painter.drawLine(int(px), 0, int(px), h)
 
-            # Playhead handle (circle at top)
             painter.setBrush(QColor('#EF4444'))
             painter.setPen(QPen(QColor('#FFFFFF'), 2))
             painter.drawEllipse(QPointF(px, 6), 5, 5)
 
     def _get_time_interval(self):
-        """Calculate appropriate time interval for markers."""
-        if self.duration <= 15:
+        visible_duration = self.duration / self._zoom
+        if visible_duration <= 5:
+            return 1
+        elif visible_duration <= 15:
             return 2
-        elif self.duration <= 30:
+        elif visible_duration <= 30:
             return 5
-        elif self.duration <= 120:
+        elif visible_duration <= 120:
             return 10
-        elif self.duration <= 300:
+        elif visible_duration <= 300:
             return 30
         else:
             return 60
 
     def mousePressEvent(self, event):
-        """Handle click to seek."""
         if self.duration > 0 and event.button() == Qt.LeftButton:
             time_sec = (event.position().x() / self.width()) * self.duration
             time_sec = max(0.0, min(time_sec, self.duration))
             self.position_clicked.emit(time_sec)
+
+
+class TimelineWidget(QScrollArea):
+    """Scrollable timeline with zoom support."""
+
+    position_clicked = Signal(float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWidgetResizable(False)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFrameShape(QFrame.NoFrame)
+
+        self._canvas = TimelineCanvas()
+        self.setWidget(self._canvas)
+
+        self._canvas.position_clicked.connect(self.position_clicked)
+
+    def set_chords(self, chords):
+        self._canvas.set_chords(chords)
+
+    def set_playhead(self, time_sec):
+        self._canvas.set_playhead(time_sec)
+        self._auto_scroll(time_sec)
+
+    def zoom_in(self):
+        self._canvas.set_zoom(self._canvas.get_zoom() * 1.5)
+
+    def zoom_out(self):
+        self._canvas.set_zoom(self._canvas.get_zoom() / 1.5)
+
+    def get_zoom(self):
+        return self._canvas.get_zoom()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._canvas._update_size()
+
+    def _auto_scroll(self, time_sec):
+        """Keep playhead visible during playback."""
+        if self._canvas.duration <= 0:
+            return
+        canvas_w = self._canvas.width()
+        px = (time_sec / self._canvas.duration) * canvas_w
+        viewport_w = self.viewport().width()
+        scroll_bar = self.horizontalScrollBar()
+
+        # Scroll if playhead is near edges
+        visible_left = scroll_bar.value()
+        visible_right = visible_left + viewport_w
+        margin = viewport_w * 0.15
+
+        if px < visible_left + margin or px > visible_right - margin:
+            scroll_bar.setValue(int(px - viewport_w / 2))
