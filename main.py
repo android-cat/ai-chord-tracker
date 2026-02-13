@@ -6,7 +6,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtCore import Qt
 
 from ui.main_window import MainWindow
@@ -21,6 +21,12 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("AI Chord Tracker")
+    
+    # Set application icon
+    icon_path = os.path.join(os.path.dirname(__file__), "resources", "app_icon.png")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+        
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(STYLESHEET)
 
