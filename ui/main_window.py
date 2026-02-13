@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
         # Title
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        title = QLabel("Auto Chord Tracker")
+        title = QLabel("AI Chord Tracker")
         title.setObjectName("titleLabel")
         title_col.addWidget(title)
         subtitle = QLabel("AI-powered automatic chord estimation")

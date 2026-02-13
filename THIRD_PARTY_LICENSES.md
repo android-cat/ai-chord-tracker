@@ -1,6 +1,6 @@
 # Third Party Licenses
 
-This file contains the licenses of third-party libraries used by Auto Chord Tracker v2.
+This file contains the licenses of third-party libraries used by AI Chord Tracker.
 
 ---
 

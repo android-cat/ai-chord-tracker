@@ -25,28 +25,31 @@ class PlayerControls(QWidget):
         layout.setContentsMargins(0, 8, 0, 8)
         layout.setSpacing(12)
 
+        # Common style for all transport buttons
+        btn_style = self._get_button_style()
+
         # Reverse button
-        self.reverse_btn = QPushButton("⏪")
+        self.reverse_btn = QPushButton("◀◀")
         self.reverse_btn.setFixedSize(44, 44)
         self.reverse_btn.setToolTip("逆再生")
         self.reverse_btn.setCursor(Qt.PointingHandCursor)
-        self.reverse_btn.setStyleSheet(self._circle_button_style())
+        self.reverse_btn.setStyleSheet(btn_style)
         layout.addWidget(self.reverse_btn)
 
-        # Play / Pause button
+        # Play / Stop button
         self.play_btn = QPushButton("▶")
         self.play_btn.setFixedSize(52, 52)
         self.play_btn.setToolTip("再生")
         self.play_btn.setCursor(Qt.PointingHandCursor)
-        self.play_btn.setStyleSheet(self._play_button_style())
+        self.play_btn.setStyleSheet(self._get_button_style(font_size=20, radius=26))
         layout.addWidget(self.play_btn)
 
         # Fast-forward button
-        self.ff_btn = QPushButton("⏩")
+        self.ff_btn = QPushButton("▶▶")
         self.ff_btn.setFixedSize(44, 44)
         self.ff_btn.setToolTip("早送り")
         self.ff_btn.setCursor(Qt.PointingHandCursor)
-        self.ff_btn.setStyleSheet(self._circle_button_style())
+        self.ff_btn.setStyleSheet(btn_style)
         layout.addWidget(self.ff_btn)
 
         layout.addSpacing(8)
@@ -101,8 +104,8 @@ class PlayerControls(QWidget):
 
     def set_playing(self, is_playing):
         self._is_playing = is_playing
-        self.play_btn.setText("⏸" if is_playing else "▶")
-        self.play_btn.setToolTip("一時停止" if is_playing else "再生")
+        self.play_btn.setText("■" if is_playing else "▶")
+        self.play_btn.setToolTip("停止" if is_playing else "再生")
 
     # ── slots ───────────────────────────────────────────────────
 
@@ -149,48 +152,24 @@ class PlayerControls(QWidget):
     # ── styles ──────────────────────────────────────────────────
 
     @staticmethod
-    def _circle_button_style():
-        return """
-            QPushButton {
-                background-color: #F8F9FA;
-                border: 1px solid #E4E7EB;
-                border-radius: 22px;
-                font-size: 18px;
-                padding: 0;
-            }
-            QPushButton:hover {
-                background-color: #EFF6FF;
-                border-color: #3B82F6;
-            }
-            QPushButton:pressed {
-                background-color: #DBEAFE;
-            }
-            QPushButton:disabled {
-                background-color: #F3F4F6;
-                color: #9CA3AF;
-                border-color: #E5E7EB;
-            }
-        """
-
-    @staticmethod
-    def _play_button_style():
-        return """
-            QPushButton {
+    def _get_button_style(font_size=16, radius=22):
+        return f"""
+            QPushButton {{
                 background-color: #3B82F6;
                 color: white;
                 border: none;
-                border-radius: 26px;
-                font-size: 20px;
+                border-radius: {radius}px;
+                font-size: {font_size}px;
                 padding: 0;
-            }
-            QPushButton:hover {
+            }}
+            QPushButton:hover {{
                 background-color: #2563EB;
-            }
-            QPushButton:pressed {
+            }}
+            QPushButton:pressed {{
                 background-color: #1D4ED8;
-            }
-            QPushButton:disabled {
+            }}
+            QPushButton:disabled {{
                 background-color: #93C5FD;
                 color: rgba(255,255,255,0.6);
-            }
+            }}
         """

@@ -1,4 +1,4 @@
-"""Auto Chord Tracker v2 - Modern chord estimation application."""
+"""AI Chord Tracker - Modern chord estimation application."""
 import sys
 import os
 
@@ -20,7 +20,7 @@ def main():
     )
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Auto Chord Tracker")
+    app.setApplicationName("AI Chord Tracker")
     app.setFont(QFont("Segoe UI", 10))
     app.setStyleSheet(STYLESHEET)
 

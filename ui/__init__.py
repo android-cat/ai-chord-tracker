@@ -1,1 +1,1 @@
-# Auto Chord Tracker v2 - UI package
+# AI Chord Tracker - UI package
