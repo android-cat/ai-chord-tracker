@@ -99,6 +99,22 @@ def preprocess(path, sr=22050, mono=False):
     return S_padding, bins_per_second, duration
 
 
+def estimate_tempo(path):
+    """Estimate the global tempo (BPM) of an audio file.
+
+    Args:
+        path: Path to audio file.
+
+    Returns:
+        Estimated BPM as a float.
+    """
+    y, sr = librosa.load(path, sr=22050, mono=True)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    if isinstance(tempo, np.ndarray):
+        tempo = tempo[0]
+    return float(tempo)
+
+
 def load_audio_for_playback(path, sr=None):
     """Load audio for playback (stereo, original sample rate).
 

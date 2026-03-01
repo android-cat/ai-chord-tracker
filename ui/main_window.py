@@ -4,7 +4,7 @@ import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFileDialog, QProgressBar,
-    QFrame, QStatusBar, QMessageBox
+    QFrame, QStatusBar, QMessageBox, QMenu
 )
 from PySide6.QtCore import Qt, Signal, Slot, QThread
 
@@ -17,7 +17,7 @@ from player import AudioPlayer
 class AnalysisWorker(QThread):
     """Background worker for audio analysis."""
 
-    finished = Signal(list, list)         # chord_timeline, key_timeline
+    finished = Signal(list, list, float)  # chord_timeline, key_timeline, bpm
     error = Signal(str)
     progress = Signal(str)               # status message
     audio_loaded = Signal(object, int)   # audio_data, sample_rate
@@ -31,7 +31,8 @@ class AnalysisWorker(QThread):
         try:
             from audio_processor import (
                 preprocess, convert_time, convert_time_key,
-                modify_accidentals, load_audio_for_playback
+                modify_accidentals, load_audio_for_playback,
+                estimate_tempo
             )
 
             self.progress.emit("音声ファイル読み込み中...")
@@ -52,7 +53,10 @@ class AnalysisWorker(QThread):
             self.progress.emit("アクシデンタル修正中...")
             chord_times = modify_accidentals(chord_times, key_times)
 
-            self.finished.emit(chord_times, key_times)
+            self.progress.emit("テンポ推定中...")
+            bpm = estimate_tempo(self.filepath)
+
+            self.finished.emit(chord_times, key_times, bpm)
         except Exception as e:
             self.error.emit(str(e))
 
@@ -198,13 +202,20 @@ class MainWindow(QMainWindow):
         self.open_button.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.open_button)
 
-        # Export button
-        self.export_button = QPushButton("  テキスト出力")
+        # Export button (Menu)
+        self.export_button = QPushButton("  出力")
         self.export_button.setObjectName("primaryButton")
         self.export_button.setFixedHeight(42)
         self.export_button.setMinimumWidth(160)
         self.export_button.setCursor(Qt.PointingHandCursor)
         self.export_button.setEnabled(False)
+        
+        # Create export drop-down menu
+        self.export_menu = QMenu(self.export_button)
+        self.action_export_text = self.export_menu.addAction("テキスト出力")
+        self.action_export_midi = self.export_menu.addAction("MIDI出力")
+        self.export_button.setMenu(self.export_menu)
+        
         layout.addWidget(self.export_button)
 
         return layout
@@ -261,7 +272,9 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self):
         self.open_button.clicked.connect(self._on_open_file)
-        self.export_button.clicked.connect(self._on_export_text)
+        # Connect menu actions
+        self.action_export_text.triggered.connect(self._on_export_text)
+        self.action_export_midi.triggered.connect(self._on_export_midi)
 
         # Player → UI
         self.player.position_changed.connect(self._on_position_changed)
@@ -322,10 +335,11 @@ class MainWindow(QMainWindow):
         self.player.load(audio_data, sr)
         self.waveform_widget.set_audio(audio_data, sr)
 
-    @Slot(list, list)
-    def _on_analysis_finished(self, chord_times, key_times):
+    @Slot(list, list, float)
+    def _on_analysis_finished(self, chord_times, key_times, bpm):
         self.chord_timeline = chord_times
         self.key_timeline = key_times
+        self.current_bpm = bpm
         self.timeline_widget.set_chords(chord_times)
         self.timeline_widget.set_keys(key_times)
 
@@ -448,6 +462,46 @@ class MainWindow(QMainWindow):
 
             self.status_bar.showMessage(
                 f"テキスト出力完了: {os.path.basename(filepath)}")
+        except Exception as e:
+            QMessageBox.critical(
+                self, "エラー",
+                f"ファイルの保存に失敗しました:\n{e}")
+
+    @Slot()
+    def _on_export_midi(self):
+        """Export chord timeline as a MIDI file."""
+        if not self.chord_timeline:
+            QMessageBox.information(self, "情報", "エクスポートするコードデータがありません。")
+            return
+
+        # Default filename based on the audio file
+        default_name = ""
+        if self.current_filepath:
+            base = os.path.splitext(os.path.basename(self.current_filepath))[0]
+            default_dir = os.path.dirname(self.current_filepath)
+            default_name = os.path.join(default_dir, f"{base}_chords.mid")
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self,
+            "MIDIとして保存",
+            default_name,
+            "MIDIファイル (*.mid *.midi);;All Files (*)"
+        )
+        if not filepath:
+            return
+
+        try:
+            from midi_export import export_chords_to_midi
+            bpm = getattr(self, 'current_bpm', 120.0)
+            success, error_msg = export_chords_to_midi(self.chord_timeline, filepath, bpm=bpm)
+            
+            if success:
+                self.status_bar.showMessage(
+                    f"MIDI出力完了: {os.path.basename(filepath)}")
+            else:
+                QMessageBox.critical(
+                    self, "エラー",
+                    f"ファイルの保存に失敗しました:\n{error_msg}")
         except Exception as e:
             QMessageBox.critical(
                 self, "エラー",

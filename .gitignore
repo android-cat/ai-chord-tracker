@@ -46,3 +46,4 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+=1.3.0
