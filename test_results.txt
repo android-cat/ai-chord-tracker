@@ -1,0 +1,79 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.6, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\user\Videos\ai-chord-tracker\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\user\Videos\ai-chord-tracker
+plugins: mock-3.15.1
+collecting ... collected 7 items
+
+tests/test_audio_processor.py::test_minmax PASSED                        [ 14%]
+tests/test_audio_processor.py::test_get_root_index PASSED                [ 28%]
+tests/test_audio_processor.py::test_convert_time FAILED                  [ 42%]
+tests/test_chord_model.py::test_chord_model_init PASSED                  [ 57%]
+tests/test_chord_model.py::test_chord_model_predict PASSED               [ 71%]
+tests/test_midi_export.py::test_parse_chord PASSED                       [ 85%]
+tests/test_midi_export.py::test_get_chord_intervals FAILED               [100%]
+
+================================== FAILURES ===================================
+______________________________ test_convert_time ______________________________
+
+mocker = <pytest_mock.plugin.MockerFixture object at 0x0000016A7812DA90>
+
+    def test_convert_time(mocker):
+        # dlchordx.Chordが動的インポートされるため、影響を受けないようにモック化する
+        mocker.patch("audio_processor.Chord", None)
+    
+        # pred形式は [bass, chord, key]. それぞれ要素はshape=(1, 1, timesteps)を想定
+        # 5フレームのデータを作成
+        bass = np.array([[[0, 0, 0, 0, 0]]])
+        chord = np.array([[[0, 0, 0, 1, 1]]])  # フレーム3（時間0.3秒）でコードが変化するシナリオ
+        pred = [bass, chord, None]
+    
+        chord_index = {"0": "C", "1": "G"}
+        bins_per_second = 10.0  # 1フレームあたり0.1秒とする
+    
+        # 変換関数実行
+        times = convert_time(pred, bins_per_second, chord_index, min_time=0.0)
+    
+        # [start_time, end_time, chord_name] のリストが返ることを期待
+        assert isinstance(times, list)
+>       assert len(times) == 2  # C と G の2つのブロックに分かれるはず
+        ^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 1 == 2
+E        +  where 1 = len([[0.0, 0.3, 'C']])
+
+tests\test_audio_processor.py:48: AssertionError
+__________________________ test_get_chord_intervals ___________________________
+
+    def test_get_chord_intervals():
+        # 基本のトライアド等
+        assert _get_chord_intervals("") == [0, 4, 7] # Major
+        assert _get_chord_intervals("m") == [0, 3, 7] # Minor
+    
+        # セブンスコード
+        assert _get_chord_intervals("7") == [0, 4, 7, 10]
+        assert _get_chord_intervals("m7") == [0, 3, 7, 10]
+        assert _get_chord_intervals("M7") == [0, 4, 7, 11]
+    
+        # ディミニッシュ、オーギュメント
+        assert _get_chord_intervals("dim") == [0, 3, 6]
+        assert _get_chord_intervals("aug") == [0, 4, 8]
+    
+        # エクステンションコード (9th) のフォールバック確認
+        assert _get_chord_intervals("m9") == [0, 3, 7, 10, 14]
+>       assert _get_chord_intervals("M9") == [0, 4, 7, 11, 14]
+E       AssertionError: assert [0, 4, 7, 10, 14] == [0, 4, 7, 11, 14]
+E         
+E         At index 3 diff: 10 != 11
+E         
+E         Full diff:
+E           [
+E               0,
+E               4,...
+E         
+E         ...Full output truncated (7 lines hidden), use '-vv' to show
+
+tests\test_midi_export.py:33: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_audio_processor.py::test_convert_time - AssertionError: ass...
+FAILED tests/test_midi_export.py::test_get_chord_intervals - AssertionError: ...
+========================= 2 failed, 5 passed in 3.72s =========================
